@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>糖尿病食 単位プランナー</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #f0ede6;
+  --surface: #ffffff;
+  --surface2: #f9f7f3;
+  --border: #ddd9cf;
+  --text: #1c1a16;
+  --muted: #7a756a;
+  --morning: #d4892a;
+  --noon: #3a8f5c;
+  --evening: #4a6f9a;
+  --morning-bg: #fff8ee;
+  --noon-bg: #eef9f3;
+  --evening-bg: #eef3fa;
+  --dm: #2d6a4f;
+  --dm-bg: #d8f3dc;
+  --shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  padding-bottom: 60px;
+}
+
+/* ===== HEADER ===== */
+header {
+  background: var(--text);
+  color: #fff;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+
+header h1 { font-size: 14px; font-weight: 700; letter-spacing: 0.05em; }
+header p { font-size: 10px; opacity: 0.5; margin-top: 2px; }
+
+/* ===== LAYOUT ===== */
+.page { display: flex; min-height: calc(100vh - 52px); }
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 20px 16px;
+  overflow-y: auto;
+  position: sticky;
+  top: 52px;
+  height: calc(100vh - 52px);
+}
+
+/* Main */
+.main {
+  flex: 1;
+  padding: 20px 16px;
+  overflow-x: auto;
+}
+
+/* ===== SIDEBAR COMPONENTS ===== */
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  margin-top: 18px;
+}
+.section-label:first-child { margin-top: 0; }
+
+
+.field { margin-bottom: 12px; }
+.field label { font-size: 11px; font-weight: 500; color: var(--muted); display: block; margin-bottom: 4px; }
+.field-row { display: flex; align-items: center; gap: 6px; }
+.field-row input, .field-row select {
+  flex: 1;
+  font-family: 'DM Mono', monospace;
+  font-size: 15px;
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--text);
+  outline: none;
+  -webkit-appearance: none;
+  width: 100%;
+}
+.field-row input:focus { border-color: var(--text); }
+.field-unit { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+.toggle-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.chip {
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--muted);
+  font-family: 'Noto Sans JP', sans-serif;
+  transition: all 0.15s;
+}
+.chip.on { background: var(--text); color: #fff; border-color: var(--text); }
+
+.ratio-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.ratio-item label { font-size: 11px; font-weight: 700; display: block; margin-bottom: 4px; text-align: center; }
+.ratio-item input { text-align: center; }
+.lm { color: var(--morning); }
+.ln { color: var(--noon); }
+.le { color: var(--evening); }
+
+.btn-main {
+  width: 100%;
+  background: var(--text);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 13px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Noto Sans JP', sans-serif;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  margin-top: 16px;
+  transition: opacity 0.18s;
+}
+.btn-main:active { opacity: 0.75; }
+
+/* ===== MAIN CONTENT ===== */
+.result-panel { display: none; }
+.result-panel.visible { display: block; }
+
+/* Summary bar */
+.summary-bar {
+  background: var(--text);
+  color: #fff;
+  border-radius: 12px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.sum-item { text-align: center; }
+.sum-val { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; }
+.sum-key { font-size: 10px; opacity: 0.55; margin-top: 2px; }
+.sum-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.12);
+  border-radius: 20px;
+  padding: 4px 12px;
+}
+
+/* Export buttons */
+.export-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.btn-export {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Noto Sans JP', sans-serif;
+  color: var(--text);
+  transition: all 0.15s;
+}
+.btn-export:hover { background: var(--text); color: #fff; border-color: var(--text); }
+.btn-export .ico { font-size: 15px; }
+
+/* Note */
+.note-bar {
+  background: #fffbee;
+  border: 1.5px solid #e8d880;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 11px;
+  color: #7a6010;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+
+/* ===== GRID TABLE ===== */
+.grid-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.meal-grid {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--surface);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+/* Header row */
+.meal-grid thead tr th {
+  padding: 14px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  color: #fff;
+}
+.th-group { background: #3a3630; text-align: left !important; width: 170px; }
+.th-morning { background: var(--morning); }
+.th-noon { background: var(--noon); }
+.th-evening { background: var(--evening); }
+.th-total { background: #3a3630; }
+
+.th-sub { font-size: 10px; font-weight: 400; opacity: 0.8; margin-top: 2px; }
+
+/* Body rows */
+.meal-grid tbody tr:nth-child(even) { background: var(--surface2); }
+.meal-grid tbody tr:hover { background: #f0ede6; }
+.meal-grid tbody tr.total-row {
+  background: #f5f0e8;
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+}
+
+.meal-grid td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.meal-grid tbody tr:last-child td { border-bottom: none; }
+
+.td-group { font-weight: 500; }
+.td-group-sub { font-size: 10px; color: var(--muted); display: block; margin-top: 2px; }
+.td-center { text-align: center; }
+
+.dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Spinner input */
+.spinner-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.spinner-btn {
+  background: var(--surface2);
+  border: none;
+  padding: 4px 9px;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--text);
+  line-height: 1;
+  font-family: monospace;
+  transition: background 0.12s;
+  user-select: none;
+}
+.spinner-btn:hover { background: var(--border); }
+.spinner-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 15px;
+  font-weight: 500;
+  min-width: 32px;
+  text-align: center;
+  padding: 4px 4px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  -moz-appearance: textfield;
+}
+.spinner-val::-webkit-inner-spin-button { display: none; }
+
+.total-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.kcal-note { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* Recalc highlight */
+.changed { animation: flash 0.4s; }
+@keyframes flash {
+  0% { background: #fffbe6; }
+  100% { background: transparent; }
+}
+
+
+/* ===== 一時記録 ===== */
+.save-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #2d6a4f;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Noto Sans JP', sans-serif;
+  transition: opacity 0.15s;
+}
+.save-btn:active { opacity: 0.75; }
+
+.records-panel {
+  margin-top: 20px;
+  border-top: 2px dashed var(--border);
+  padding-top: 16px;
+}
+.records-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.record-item {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.record-item:hover { border-color: #2d6a4f; }
+.record-item.active-rec { border-color: #2d6a4f; background: #f0faf4; }
+.record-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.record-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+.record-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.record-delete {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.record-delete:hover { color: #c00; }
+.record-detail {
+  display: none;
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.record-item.active-rec .record-detail { display: block; }
+.record-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px dotted var(--border);
+}
+.record-row:last-child { border-bottom: none; }
+.record-row-name { color: var(--muted); }
+.record-row-vals { font-family: 'DM Mono', monospace; font-weight: 500; font-size: 12px; }
+.no-records {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  padding: 20px;
+}
+
+@media print {
+  .records-panel { display: none !important; }
+}
+
+/* ===== PRINT ===== */
+@media print {
+  body { background: #fff; padding: 0; font-size: 11px; }
+  header, .sidebar, .export-row { display: none !important; }
+  .page { display: block; }
+  .main { padding: 0; }
+  .result-panel { display: block !important; }
+  .summary-bar { color: #000; background: #eee; border-radius: 0; }
+  .badge { background: #ddd; color: #000; }
+  .spinner-btn { display: none; }
+  .spinner-val { border: 1px solid #ccc; }
+  .meal-grid { box-shadow: none; border: 1px solid #ccc; }
+  .meal-grid thead tr th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .note-bar { border: 1px solid #ccc; background: #fffbee; }
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 700px) {
+  .page { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .main { padding: 14px 10px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🍽 食事単位プランナー</h1>
+    <p>糖尿病食（食品交換表第7版）／ 栄養士・医療スタッフ向け</p>
+  </div>
+</header>
+
+<div class="page">
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <div class="section-label">指示エネルギー</div>
+    <div class="field">
+      <div class="field-row">
+        <input type="number" id="calories" placeholder="1600" min="800" max="3000" step="100" oninput="onCalInput()">
+        <span class="field-unit">kcal/日</span>
+      </div>
+    </div>
+
+    <div class="section-label">指示単位数</div>
+    <div class="field">
+      <div class="field-row">
+        <input type="number" id="total-units" placeholder="20" min="10" max="40" step="1">
+        <span class="field-unit">単位/日</span>
+      </div>
+    </div>
+
+    <div class="section-label">食事配分（%）</div>
+    <div class="ratio-grid">
+      <div class="ratio-item">
+        <label class="lm">☀️ 朝</label>
+        <div class="field-row"><input type="number" id="r-m" value="30" min="10" max="60" step="5"></div>
+      </div>
+      <div class="ratio-item">
+        <label class="ln">🌤 昼</label>
+        <div class="field-row"><input type="number" id="r-n" value="40" min="10" max="60" step="5"></div>
+      </div>
+      <div class="ratio-item">
+        <label class="le">🌙 夕</label>
+        <div class="field-row"><input type="number" id="r-e" value="30" min="10" max="60" step="5"></div>
+      </div>
+    </div>
+
+    <button class="btn-main" onclick="generate()">単位を割り振る →</button>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main">
+    <div class="result-panel" id="result-panel">
+
+      <!-- Summary -->
+      <div class="summary-bar" id="summary-bar">
+        <div class="sum-item">
+          <div class="sum-val" id="s-kcal">—</div>
+          <div class="sum-key">指示 kcal</div>
+        </div>
+        <div class="sum-item">
+          <div class="sum-val" id="s-units">—</div>
+          <div class="sum-key">総単位数</div>
+        </div>
+        <div class="sum-item">
+          <div class="sum-val" id="s-protein">—</div>
+          <div class="sum-key">たんぱく質 g</div>
+        </div>
+        <div class="sum-badges" id="s-badges"></div>
+      </div>
+
+      <!-- Export -->
+      <div class="export-row">
+        <button class="save-btn" onclick="saveRecord()"><span class="ico">💾</span>この結果を記録</button>
+        <button class="btn-export" onclick="doPrint()"><span class="ico">🖨️</span>印刷</button>
+        <button class="btn-export" onclick="doPDF()"><span class="ico">📄</span>PDF保存</button>
+        <button class="btn-export" onclick="doExcel()"><span class="ico">📊</span>Excel出力</button>
+      </div>
+
+      <!-- 一時記録パネル -->
+      <div class="records-panel" id="records-panel" style="display:none;">
+        <div class="records-title">📋 一時記録（最大5件）</div>
+        <div id="records-list"></div>
+      </div>
+
+      <!-- Note -->
+      <div class="note-bar" id="note-bar"></div>
+
+      <!-- Grid -->
+      <div class="grid-wrap">
+        <table class="meal-grid" id="meal-grid">
+          <thead>
+            <tr>
+              <th class="th-group">食品グループ</th>
+              <th class="th-morning">
+                ☀️ 朝食<div class="th-sub" id="hd-m">— 単位 / — kcal</div>
+              </th>
+              <th class="th-noon">
+                🌤 昼食<div class="th-sub" id="hd-n">— 単位 / — kcal</div>
+              </th>
+              <th class="th-evening">
+                🌙 夕食<div class="th-sub" id="hd-e">— 単位 / — kcal</div>
+              </th>
+              <th class="th-total">合計</th>
+            </tr>
+          </thead>
+          <tbody id="grid-body"></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- Placeholder -->
+    <div id="placeholder" style="text-align:center;padding:80px 20px;color:var(--muted);">
+      <div style="font-size:48px;margin-bottom:16px;">🍽</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">左のパネルで条件を設定してください</div>
+      <div style="font-size:12px;">エネルギー量を入力し「単位を割り振る」を押すと<br>1日3食の割り振り表が表示されます</div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ===== STATE =====
+let state = null;
+
+function onCalInput() {
+  const v = parseInt(document.getElementById('calories').value);
+  if (v > 0) document.getElementById('total-units').value = Math.round(v / 80);
+}
+
+// ===== FOOD GROUPS =====
+// ===== 食品グループ定義（食品交換表第7版 表1〜6＋調味料） =====
+const FOOD_GROUPS = [
+  { key:'grain',   name:'表1：穀類・いも・炭水化物の多い野菜と種実', sub:'ご飯・パン・麺・芋・かぼちゃ等',   color:'#b8944a', ratio:0.50, proteinPer:2,   kcalPer:80 },
+  { key:'fruit',   name:'表2：果物',                               sub:'りんご・みかん・バナナ等',           color:'#d05080', ratio:0.05, proteinPer:0.5, kcalPer:80 },
+  { key:'protein', name:'表3：魚介・肉・卵・大豆と大豆製品',         sub:'魚・肉・卵・豆腐・納豆等',           color:'#d46050', ratio:0.20, proteinPer:7,   kcalPer:80 },
+  { key:'milk',    name:'表4：牛乳と乳製品（チーズを除く）',          sub:'牛乳・ヨーグルト・スキムミルク等',    color:'#6090c0', ratio:0.10, proteinPer:5,   kcalPer:80 },
+  { key:'fat',     name:'表5：油脂・多脂性食品',                    sub:'植物油・バター・マヨネーズ・アボカド等', color:'#e0a030', ratio:0.05, proteinPer:0,   kcalPer:80 },
+  { key:'veg',     name:'表6：野菜（炭水化物の少ない）・海藻・きのこ・こんにゃく', sub:'緑黄色野菜・淡色野菜・海藻・きのこ等', color:'#50a060', ratio:0.05, proteinPer:1, kcalPer:80 },
+  { key:'other',   name:'調味料',                                  sub:'砂糖・みりん・みそ・ケチャップ等',     color:'#9080b0', ratio:0.05, proteinPer:0,   kcalPer:80 },
+];
+
+// ===== GENERATE =====
+function generate() {
+  const kcal = parseInt(document.getElementById('calories').value);
+  if (!kcal || kcal < 800) { alert('エネルギー量を入力してください（800kcal以上）'); return; }
+
+  const rm = parseInt(document.getElementById('r-m').value)||30;
+  const rn = parseInt(document.getElementById('r-n').value)||40;
+  const re = parseInt(document.getElementById('r-e').value)||30;
+  const rtotal = rm+rn+re;
+
+  const totalUnits = parseInt(document.getElementById('total-units').value) || Math.round(kcal/80);
+
+  // 各グループへの単位配分
+  let allocated = FOOD_GROUPS.map(g => ({ ...g, total: Math.round(totalUnits*g.ratio) }));
+  // 端数を表1に吸収
+  const sum = allocated.reduce((s,g)=>s+g.total,0);
+  allocated[0].total += (totalUnits - sum);
+
+  // 食事ごとの配分
+  const ratios = { m: rm/rtotal, n: rn/rtotal, e: re/rtotal };
+  allocated = allocated.map(g => {
+    const m = Math.round(g.total * ratios.m);
+    const n = Math.round(g.total * ratios.n);
+    const e = Math.max(0, g.total - m - n);
+    return { ...g, m, n, e };
+  });
+
+  state = { kcal, totalUnits, groups: allocated, rm, rn, re, rtotal };
+
+  renderResult();
+
+  document.getElementById('result-panel').classList.add('visible');
+  document.getElementById('placeholder').style.display = 'none';
+}
+
+// ===== RENDER =====
+function renderResult() {
+  const { kcal, totalUnits, groups, rm, rn, re, rtotal } = state;
+
+  // サマリー
+  document.getElementById('s-kcal').textContent = kcal;
+  document.getElementById('s-units').textContent = calcTotalUnits().total;
+  const protEst = groups.reduce((s,g) => s + (g.m+g.n+g.e)*g.proteinPer, 0);
+  document.getElementById('s-protein').textContent = '約' + Math.round(protEst);
+
+  document.getElementById('s-badges').innerHTML =
+    `<span class="badge">糖尿病食</span><span class="badge">1単位=80kcal</span>`;
+
+  // 注記
+  document.getElementById('note-bar').innerHTML =
+    `📋 指示：${kcal}kcal（${totalUnits}単位） ／ 食事配分 朝${rm}%：昼${rn}%：夕${re}%<br>
+    ※食品交換表（第7版）に基づく標準配分です。患者の病態・合併症に応じて調整してください。`;
+
+  updateHeaders();
+
+  // グリッド描画
+  const tbody = document.getElementById('grid-body');
+  tbody.innerHTML = '';
+
+  groups.forEach((g, gi) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="td-group">
+        <span class="dot" style="background:${g.color}"></span>${g.name}
+        <span class="td-group-sub">${g.sub}</span>
+      </td>
+      <td class="td-center">${spinner(gi,'m',g.m)}</td>
+      <td class="td-center">${spinner(gi,'n',g.n)}</td>
+      <td class="td-center">${spinner(gi,'e',g.e)}</td>
+      <td class="td-center total-val" id="row-total-${gi}">${(Math.round((g.m+g.n+g.e)*10)/10).toFixed(1)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // 合計行
+  const totals = calcTotalUnits();
+  const tr2 = document.createElement('tr');
+  tr2.className = 'total-row';
+  tr2.innerHTML = `
+    <td class="td-group">合計</td>
+    <td class="td-center total-val" id="col-m">${totals.m.toFixed(1)}<div class="kcal-note">${Math.round(totals.m*80)} kcal</div></td>
+    <td class="td-center total-val" id="col-n">${totals.n.toFixed(1)}<div class="kcal-note">${Math.round(totals.n*80)} kcal</div></td>
+    <td class="td-center total-val" id="col-e">${totals.e.toFixed(1)}<div class="kcal-note">${Math.round(totals.e*80)} kcal</div></td>
+    <td class="td-center total-val" id="col-total">${totals.total.toFixed(1)}<div class="kcal-note">${Math.round(totals.total*80)} kcal</div></td>
+  `;
+  tbody.appendChild(tr2);
+}
+
+function spinner(gi, meal, val) {
+  const disp = Number(val).toFixed(1);
+  return `<div class="spinner-wrap">
+    <button class="spinner-btn" onclick="adjustUnit(${gi},'${meal}',-0.1)">−</button>
+    <input class="spinner-val" type="number" value="${disp}" min="0" max="30" step="0.1"
+      onchange="setUnit(${gi},'${meal}',this.value)"
+      oninput="setUnit(${gi},'${meal}',this.value)"
+      id="sp-${gi}-${meal}">
+    <button class="spinner-btn" onclick="adjustUnit(${gi},'${meal}',0.1)">＋</button>
+  </div>`;
+}
+
+function adjustUnit(gi, meal, delta) {
+  const g = state.groups[gi];
+  g[meal] = Math.round((Math.max(0, (g[meal]||0) + delta)) * 10) / 10;
+  document.getElementById(`sp-${gi}-${meal}`).value = g[meal].toFixed(1);
+  recalcTotals(gi);
+}
+
+function setUnit(gi, meal, val) {
+  const v = Math.round(Math.max(0, parseFloat(val)||0) * 10) / 10;
+  state.groups[gi][meal] = v;
+  recalcTotals(gi);
+}
+
+function recalcTotals(gi) {
+  const g = state.groups[gi];
+  const rowTotal = Math.round((g.m + g.n + g.e) * 10) / 10;
+  document.getElementById(`row-total-${gi}`).textContent = rowTotal.toFixed(1);
+
+  const totals = calcTotalUnits();
+  const fmt = v => v.toFixed(1);
+  const kcal = v => Math.round(v * 80);
+  document.getElementById('col-m').innerHTML = `${fmt(totals.m)}<div class="kcal-note">${kcal(totals.m)} kcal</div>`;
+  document.getElementById('col-n').innerHTML = `${fmt(totals.n)}<div class="kcal-note">${kcal(totals.n)} kcal</div>`;
+  document.getElementById('col-e').innerHTML = `${fmt(totals.e)}<div class="kcal-note">${kcal(totals.e)} kcal</div>`;
+  document.getElementById('col-total').innerHTML = `${fmt(totals.total)}<div class="kcal-note">${kcal(totals.total)} kcal</div>`;
+  document.getElementById('s-units').textContent = fmt(totals.total);
+  updateHeaders();
+}
+
+function calcTotalUnits() {
+  const r = arr => Math.round(arr.reduce((s,g)=>s+(g||0),0) * 10) / 10;
+  const m = r(state.groups.map(g=>g.m));
+  const n = r(state.groups.map(g=>g.n));
+  const e = r(state.groups.map(g=>g.e));
+  const total = Math.round((m+n+e)*10)/10;
+  return { m, n, e, total };
+}
+
+function updateHeaders() {
+  const t = calcTotalUnits();
+  const fmt = v => v.toFixed(1);
+  const kcal = v => Math.round(v * 80);
+  document.getElementById('hd-m').textContent = `${fmt(t.m)}単位 / ${kcal(t.m)}kcal`;
+  document.getElementById('hd-n').textContent = `${fmt(t.n)}単位 / ${kcal(t.n)}kcal`;
+  document.getElementById('hd-e').textContent = `${fmt(t.e)}単位 / ${kcal(t.e)}kcal`;
+}
+
+// ===== 一時記録 =====
+let records = []; // { id, label, timestamp, kcal, totalUnits, groups, rm, rn, re }
+let activeRecordId = null;
+
+function saveRecord() {
+  if (!state) { alert('先に「単位を割り振る」を実行してください。'); return; }
+
+  const now = new Date();
+  const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  const label = prompt('記録名を入力してください（省略可）', `${state.kcal}kcal / ${state.totalUnits}単位`);
+  if (label === null) return; // キャンセル
+
+  const record = {
+    id: Date.now(),
+    label: label || `${state.kcal}kcal / ${state.totalUnits}単位`,
+    timestamp: timeStr,
+    kcal: state.kcal,
+    totalUnits: state.totalUnits,
+    rm: state.rm, rn: state.rn, re: state.re,
+    groups: JSON.parse(JSON.stringify(state.groups)) // deep copy
+  };
+
+  records.unshift(record); // 最新を先頭に
+  if (records.length > 5) records.pop(); // 最大5件
+
+  renderRecords();
+}
+
+function renderRecords() {
+  const panel = document.getElementById('records-panel');
+  const list  = document.getElementById('records-list');
+
+  if (records.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+
+  list.innerHTML = records.map(rec => {
+    const t = calcTotalsFromGroups(rec.groups);
+    const isActive = rec.id === activeRecordId;
+    const rows = rec.groups.map(g => {
+      const total = (Math.round((g.m+g.n+g.e)*10)/10).toFixed(1);
+      return `<div class="record-row">
+        <span class="record-row-name">${g.name}</span>
+        <span class="record-row-vals">朝${g.m.toFixed(1)} 昼${g.n.toFixed(1)} 夕${g.e.toFixed(1)} 計${total}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="record-item${isActive?' active-rec':''}" onclick="toggleRecord(${rec.id})">
+      <div class="record-header">
+        <div>
+          <div class="record-label">${rec.label}</div>
+          <div class="record-meta">${rec.timestamp} 保存 ／ 朝${rec.rm}%:昼${rec.rn}%:夕${rec.re}% ／ 計${t.total.toFixed(1)}単位・${Math.round(t.total*80)}kcal</div>
+        </div>
+        <button class="record-delete" onclick="deleteRecord(event,${rec.id})">🗑</button>
+      </div>
+      <div class="record-detail">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleRecord(id) {
+  activeRecordId = (activeRecordId === id) ? null : id;
+  renderRecords();
+}
+
+function deleteRecord(e, id) {
+  e.stopPropagation();
+  records = records.filter(r => r.id !== id);
+  if (activeRecordId === id) activeRecordId = null;
+  renderRecords();
+}
+
+function calcTotalsFromGroups(groups) {
+  const r = arr => Math.round(arr.reduce((s,v)=>s+v,0)*10)/10;
+  const m = r(groups.map(g=>g.m));
+  const n = r(groups.map(g=>g.n));
+  const e = r(groups.map(g=>g.e));
+  return { m, n, e, total: Math.round((m+n+e)*10)/10 };
+}
+
+// ===== EXPORT =====
+function doPrint() {
+  if (!state) { alert('先に「単位を割り振る」を実行してください。'); return; }
+  window.print();
+}
+
+function doPDF() {
+  if (!state) { alert('先に「単位を割り振る」を実行してください。'); return; }
+  alert('印刷ダイアログが開きます。\n送信先で「PDFに保存」を選択してください。');
+  window.print();
+}
+
+function doExcel() {
+  if (!state) { alert('先に「単位を割り振る」を実行してください。'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excelライブラリの読み込みに失敗しました。'); return; }
+  const { kcal, groups } = state;
+  const t = calcTotalUnits();
+
+  const wb = XLSX.utils.book_new();
+
+  // === Sheet 1: 割り振り表 ===
+  const rows = [];
+  rows.push(['糖尿病食 単位プランナー（食品交換表第7版）']);
+  rows.push(['指示エネルギー', kcal + ' kcal', '', '総単位数', t.total + ' 単位']);
+  rows.push([]);
+  rows.push(['食品グループ', '食品例', '朝食（単位）', '昼食（単位）', '夕食（単位）', '合計（単位）', '合計kcal']);
+
+  groups.forEach(g => {
+    rows.push([g.name, g.sub, g.m, g.n, g.e, g.m+g.n+g.e, (g.m+g.n+g.e)*80]);
+  });
+
+  rows.push(['合計', '', t.m, t.n, t.e, t.total, t.total*80]);
+  rows.push(['kcal換算', '', t.m*80, t.n*80, t.e*80, t.total*80, '']);
+
+  const ws1 = XLSX.utils.aoa_to_sheet(rows);
+  ws1['!cols'] = [{wch:34},{wch:26},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws1, '割り振り表');
+
+  // === Sheet 2: 食事別詳細 ===
+  const rows2 = [];
+  rows2.push(['食事別 詳細']);
+  rows2.push([]);
+  const meals2 = [{key:'m',label:'朝食'},{key:'n',label:'昼食'},{key:'e',label:'夕食'}];
+  meals2.forEach(meal => {
+    rows2.push([meal.label]);
+    rows2.push(['食品グループ', '単位数', 'kcal概算', 'たんぱく質概算(g)']);
+    groups.forEach(g => {
+      rows2.push([g.name, g[meal.key], g[meal.key]*80, Math.round(g[meal.key]*g.proteinPer*10)/10]);
+    });
+    const mTotal = groups.reduce((s,g)=>s+(g[meal.key]||0),0);
+    const mProt  = groups.reduce((s,g)=>s+g[meal.key]*g.proteinPer,0);
+    rows2.push(['合計', mTotal, mTotal*80, Math.round(mProt*10)/10]);
+    rows2.push([]);
+  });
+
+  const ws2 = XLSX.utils.aoa_to_sheet(rows2);
+  ws2['!cols'] = [{wch:34},{wch:10},{wch:12},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws2, '食事別詳細');
+
+  const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  XLSX.writeFile(wb, `糖尿病食単位プラン_${dateStr}.xlsx`);
+}
+</script>
+</body>
+</html>
